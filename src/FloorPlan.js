@@ -88,6 +88,24 @@ function arrayEquals(array1, array2){
     return false
   }
 }
+const objectEquals = (objA, objB) => {
+  const aProps = Object.keys(objA);
+  const bProps = Object.keys(objB);
+
+  if (aProps.length !== bProps.length) {
+    return false;
+  }
+
+  for (let i = 0; i < aProps.length; i++) {
+    const propName = aProps[i];
+
+    if (objA[propName] !== objB[propName]) {
+      return false;
+    }
+  }
+
+  return true;
+};
 
 const startupSettings = {
   //planRotation: 90, 
@@ -120,20 +138,8 @@ let prevClickedSpaceId
 let cursorMarker
 let nearestMarkers = []
 
-let nearestDistances = {
-  meetingRoom: 0.0,
-  socializeSpace: 0.0,
-  restroom: 0.0,
-  storage: 0.0,
-  elevator: 0.0,
-  staircase: 0.0,
-  aed: 0.0,
-  emergencyExit: 0.0,
-  fireHose: 0.0,
-  fireAlarm: 0.0,
-  extinguisher: 0.0,
-  sanitizer: 0.0,
-}
+let prevClickedAssetId
+let prevNearestDistances
 
 const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
   const container = useRef(null);
@@ -143,9 +149,9 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
   //const token = "93c44a45-86a4-47c3-8a67-2d4be0fb0753" //"c6580a08-797b-4f88-ba7c-6c3db7dd7e2c"
   //const floorId = "afb8a0bc-eb37-4729-a72c-5b2637813398" //Allianze"b46e58e8-c45d-4fcd-b925-e7c4cc655715" //"45007690-d201-45f1-a403-f64de8ac6abc" 
 
-  function addMarker(fpe, position, isIconMarker, markerType = 'defalut-marker') {
+  function addMarker(fpe, position, isCursorMarker, markerType = 'defalut-marker') {
     const el = document.createElement('div');
-    el.className =  isIconMarker ? "icon-marker" : "marker"
+    el.className =  isCursorMarker ? "cursor-marker" : "icon-marker"
     el.classList.add(markerType)
 
     const marker = fpe.addHtmlMarker({
@@ -164,6 +170,7 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
   function removeCursorMarker(){
     if (cursorMarker){
       cursorMarker.remove();
+      cursorMarker = undefined
     }
   }
   function removeNearestMarkers(){
@@ -201,6 +208,24 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
         })
         spaceColorObjects.push(spaceColorObject)
       }
+    })
+  }
+  function highlightDesksChairs(assets){
+    assets.forEach(asset => {
+      if(asset.subCategories[0] === 'desk' || asset.subCategories[0] === 'taskChair'){
+        asset.node.setHighlight({
+          fill: [255, 213, 199],
+          fillOpacity: 1.0
+        })
+      }
+    })
+  }
+  function setSpaceColorObjectFillOpacity(opacity){
+    spaceColorObjects.forEach(spaceColorObject => {
+      spaceColorObject.space.node.setHighlight({
+        fill: spaceColorObject.displayData.color,
+        fillOpacity: opacity
+      })
     })
   }
   function calculateAverageDistance(fpe, spaces, assets){
@@ -257,21 +282,54 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
 
   function onClick(fpe){
     if(!fpe) return
-
+    
     fpe.on('click', (event) => {
+
       const position = event.pos
       const positionResources = fpe.getResourcesFromPosition(position)
-      
-      if(positionResources.assets.length){
-        const selectedAsset = positionResources.assets[0]
+
+      if(!positionResources.assets.length){
+        removeCursorMarker()
+        removeNearestMarkers()
+        setSpaceColorObjectFillOpacity(0.4)
+        return
       }
       
+      const selectedAsset = positionResources.assets[0]
+
+      if(selectedAsset.subCategories[0] !== 'desk' && selectedAsset.subCategories[0] !== 'taskChair') {
+        removeCursorMarker()
+        removeNearestMarkers()
+        setSpaceColorObjectFillOpacity(0.4)
+        return
+      }
+
+      if (prevClickedAssetId && prevClickedAssetId == selectedAsset.id) return
+      prevClickedAssetId = selectedAsset.id
+      
+      setSpaceColorObjectFillOpacity(0.2)
+
       //remove markers if exists
       removeCursorMarker()
       removeNearestMarkers()
 
       //add cursorMarker
-      cursorMarker = addMarker(fpe, position, false, "cursor-marker")
+      cursorMarker = addMarker(fpe, position, true)
+
+      let nearestDistances = {
+        meetingRoom: 0.0,
+        socializeSpace: 0.0,
+        restroom: 0.0,
+        storage: 0.0,
+        elevator: 0.0,
+        staircase: 0.0,
+        aed: 0.0,
+        emergencyExit: 0.0,
+        fireHose: 0.0,
+        fireAlarm: 0.0,
+        extinguisher: 0.0,
+        sanitizer: 0.0,
+      }
       
       const meetingRoom = fpe.resources.spaces.filter(space => space.program === "meet")
       const socializeSpace = fpe.resources.spaces.filter(space => space.program === "socialize")
@@ -315,7 +373,7 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
         spaceCenterArr.sort((a, b) => a.distance - b.distance);
 
         for (let i = 0; i < 1; i++){
-          const marker = addMarker(fpe, [spaceCenterArr[i].x, spaceCenterArr[i].y], false);
+          const marker = addMarker(fpe, [spaceCenterArr[i].x, spaceCenterArr[i].y], false, spaceType);
           nearestMarkers.push(marker);
           const distanceRounded = Math.round(spaceCenterArr[i].distance * 10) / 10;
           
@@ -333,14 +391,24 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
         assetCenterArr.sort((a, b) => a.distance - b.distance);
 
         for (let i = 0; i < 1; i++){
-          const marker = addMarker(fpe, [assetCenterArr[i].x, assetCenterArr[i].y], true, assetType);
+          const marker = addMarker(fpe, [assetCenterArr[i].x, assetCenterArr[i].y], false, assetType);
           nearestMarkers.push(marker);
           const distanceRounded = Math.round(assetCenterArr[i].distance * 10) / 10;
           
           nearestDistances[assetType] = distanceRounded;
         }
       }
-      modelUpdate({nearestDistances: nearestDistances})
+      console.log('typeOf', typeof prevNearestDistances)
+      if (!prevNearestDistances){
+        prevNearestDistances = nearestDistances
+        modelUpdate({nearestDistances: nearestDistances})
+      } else if (objectEquals(prevNearestDistances, nearestDistances)){
+        console.log('equal - !!')
+        return
+      } else {
+        prevNearestDistances = nearestDistances
+        modelUpdate({nearestDistances: nearestDistances})
+      }
     })
   }
 
@@ -359,6 +427,7 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       initFloorPlan()
       .then((fpe) => {
         createSpaceColorObjects(fpe.resources.spaces)
+        highlightDesksChairs(fpe.resources.assets)
         calculateAverageDistance(fpe, fpe.resources.spaces, fpe.resources.assets)
       })
     }

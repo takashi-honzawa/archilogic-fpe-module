@@ -20,7 +20,7 @@ canvas,
   contain: layout;
   will-change: transform;
 }
-.marker {
+.defalut-marker {
   border-radius: 100%;
   background: #ffa500;
   width: 12px;
@@ -31,28 +31,48 @@ canvas,
 }
 .icon-marker {
   border-radius: 100%;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   background-color: black;
-  background-size: 90%;
+  background-size: 100%;
   background-position: center;
   background-repeat: no-repeat;
 }
+/* safety resources */ 
 .aed {
-  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/BW/AED_bw.png');
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/AED.png');
 }
 .emergencyExit {
-  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/BW/emergency-exit_bw.png');
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/emergency-exit.png');
 }
 .fireHose {
-  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/BW/fire-hose_bw.png');
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/fire-hose.png');
 }
 .fireAlarm {
-  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/BW/fire-alarm_bw.png');
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/fire-alarm.png');
 }
 .extinguisher {
-  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/BW/fire-extinguisher_bw.png');
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/fire-extinguisher.png');
 }
 .sanitizer {
-  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/BW/sanitize_bw.png');
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/sanitize.png');
+}
+/* amenities */
+.meetingRoom {
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/meeting.png');
+}
+.socializeSpace {
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/socialize.png');
+}
+.restroom {
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/restroom.png');
+}
+.storage {
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/storage.png');
+}
+.elevator {
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/elevator.png');
+}
+.staircase {
+  background-image: url('https://takashi-honzawa.github.io/retool-template-icons/markers/staircase.png');
 }
