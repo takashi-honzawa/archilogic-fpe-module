@@ -138,6 +138,11 @@ let prevClickedSpaceId
 let cursorMarker
 let nearestMarkers = []
 
+let desks
+let deskCount
+let selectedSpaces
+let safetyAssets
+
 let prevClickedAssetId
 let prevNearestDistances
 
@@ -146,8 +151,6 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
 
   console.log('model', model)
   const { token, floorId } = model
-  //const token = "93c44a45-86a4-47c3-8a67-2d4be0fb0753" //"c6580a08-797b-4f88-ba7c-6c3db7dd7e2c"
-  //const floorId = "afb8a0bc-eb37-4729-a72c-5b2637813398" //Allianze"b46e58e8-c45d-4fcd-b925-e7c4cc655715" //"45007690-d201-45f1-a403-f64de8ac6abc" 
 
   function addMarker(fpe, position, isCursorMarker, markerType = 'defalut-marker') {
     const el = document.createElement('div');
@@ -210,6 +213,14 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       }
     })
   }
+  function setSpaceColorObjectFillOpacity(opacity){
+    spaceColorObjects.forEach(spaceColorObject => {
+      spaceColorObject.space.node.setHighlight({
+        fill: spaceColorObject.displayData.color,
+        fillOpacity: opacity
+      })
+    })
+  }
   function highlightDesksChairs(assets){
     assets.forEach(asset => {
       if(asset.subCategories[0] === 'desk' || asset.subCategories[0] === 'taskChair'){
@@ -220,23 +231,18 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       }
     })
   }
-  function setSpaceColorObjectFillOpacity(opacity){
-    spaceColorObjects.forEach(spaceColorObject => {
-      spaceColorObject.space.node.setHighlight({
-        fill: spaceColorObject.displayData.color,
-        fillOpacity: opacity
-      })
-    })
-  }
-  function calculateAverageDistance(fpe, spaces, assets){
-    const meetingRoom = spaces.filter(space => space.program === "meet")
-    const socializeSpace = spaces.filter(space => space.program === "socialize")
-    const restroom = spaces.filter(space => space.usage === "restroom")
-    const storage = spaces.filter(space => space.usage === 'storage')
-    const elevator = spaces.filter(space => space.usage === 'elevator')
-    const staircase = spaces.filter(space => space.usage === 'staircase')
+  function selectSpacesAssets(resources){
+    desks = resources.assets.filter(asset => asset.subCategories.includes("desk"))
+    deskCount = desks.length
 
-    const selectedSpaces = {
+    const meetingRoom = resources.spaces.filter(space => space.program === "meet")
+    const socializeSpace = resources.spaces.filter(space => space.program === "socialize")
+    const restroom = resources.spaces.filter(space => space.usage === "restroom")
+    const storage = resources.spaces.filter(space => space.usage === 'storage')
+    const elevator = resources.spaces.filter(space => space.usage === 'elevator')
+    const staircase = resources.spaces.filter(space => space.usage === 'staircase')
+
+    selectedSpaces = {
       meetingRoom: meetingRoom,
       socializeSpace: socializeSpace,
       restroom: restroom,
@@ -245,21 +251,38 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       staircase: staircase
     }
 
-    const avgDistanceSpaceType = {
+    const aed = resources.assets.filter(asset => asset.productId == '79ee0055-9660-4cb0-9bdb-924b383890eb')
+    const emergencyExit = resources.assets.filter(asset => asset.productId == 'b76ebd68-59d5-48c8-af38-0cd9d514c05c')
+    const fireHose = resources.assets.filter(asset => asset.productId == 'f7bb8b7b-004d-4b7f-90fd-ad8e0b7e17c2')
+    const fireAlarm = resources.assets.filter(asset => asset.productId == '530952b6-8961-4be4-b4d6-cbb9859d8756')
+    const extinguisher = resources.assets.filter(asset => asset.productId == '4a60754a-19c4-41da-aa6c-13a9b3e66d4c')
+    const sanitizer = resources.assets.filter(asset => asset.productId == '402d9f73-4eb1-4dbb-8108-c565cdd1edf7')
+      
+    safetyAssets = {
+      aed: aed,
+      emergencyExit: emergencyExit,
+      fireHose: fireHose,
+      fireAlarm: fireAlarm,
+      extinguisher: extinguisher,
+      sanitizer: sanitizer
+    }
+  }
+  
+  function calculateAverageDistance(){
+    const avgDistanceSpaceAssetType = {
       meetingRoom: 0,
       socializeSpace: 0,
       restroom: 0,
       storage: 0,
       elevator: 0,
-      staircase: 0
+      staircase: 0,
+      aed: 0.0,
+      emergencyExit: 0.0,
+      fireHose: 0.0,
+      fireAlarm: 0.0,
+      extinguisher: 0.0,
+      sanitizer: 0.0,
     }
-
-    const desks = assets.filter(asset => asset.subCategories.includes("desk"))
-    const deskCount = desks.length
-
-    // for (const desk of desks){
-    //   //addMarker(fpe, [desk.position.x, desk.position.z], false)
-    // }
 
     for (let spaceType in selectedSpaces){
       const spaceCount = selectedSpaces[spaceType].length
@@ -275,16 +298,33 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
 
         distanceSumSpaceType = distanceSumSpaceType + distanceSumPerSpace
       })
-      avgDistanceSpaceType[spaceType] = (distanceSumSpaceType / spaceCount) / deskCount
+      avgDistanceSpaceAssetType[spaceType] = (distanceSumSpaceType / spaceCount) / deskCount
     }
-    modelUpdate({avgDistances: avgDistanceSpaceType})
+
+    for (let assetType in safetyAssets){
+      const assetCount = safetyAssets[assetType].length
+      
+      let distanceSumAssetType = 0
+      
+      safetyAssets[assetType].map(asset => {
+        let distanceSumPerAsset = 0
+        for (const desk of desks){
+          const distance = getDistance({x: desk.position.x, y: desk.position.z}, {x: asset.position.x, y: asset.position.z})
+          distanceSumPerAsset = distanceSumPerAsset + distance
+        }
+
+        distanceSumAssetType = distanceSumAssetType + distanceSumPerAsset
+      })
+      avgDistanceSpaceAssetType[assetType] = (distanceSumAssetType / assetCount) / deskCount
+    }
+    console.log('avgDistanceSpaceAssetType', avgDistanceSpaceAssetType)
+    modelUpdate({avgDistances: avgDistanceSpaceAssetType})
   }
 
   function onClick(fpe){
     if(!fpe) return
     
     fpe.on('click', (event) => {
-
       const position = event.pos
       const positionResources = fpe.getResourcesFromPosition(position)
 
@@ -330,38 +370,6 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
         extinguisher: 0.0,
         sanitizer: 0.0,
       }
-      
-      const meetingRoom = fpe.resources.spaces.filter(space => space.program === "meet")
-      const socializeSpace = fpe.resources.spaces.filter(space => space.program === "socialize")
-      const restroom = fpe.resources.spaces.filter(space => space.usage === "restroom") //"restroom" || "toilet" || "bathroom"
-      const storage = fpe.resources.spaces.filter(space => space.usage === 'storage')
-      const elevator = fpe.resources.spaces.filter(space => space.usage === 'elevator')
-      const staircase = fpe.resources.spaces.filter(space => space.usage === 'staircase')
-      
-      const selectedSpaces = {
-        meetingRoom: meetingRoom,
-        socializeSpace: socializeSpace,
-        restroom: restroom,
-        storage: storage,
-        elevator: elevator,
-        staircase: staircase
-      }
-      
-      const aed = fpe.resources.assets.filter(asset => asset.productId == '79ee0055-9660-4cb0-9bdb-924b383890eb')
-      const emergencyExit = fpe.resources.assets.filter(asset => asset.productId == 'b76ebd68-59d5-48c8-af38-0cd9d514c05c')
-      const fireHose = fpe.resources.assets.filter(asset => asset.productId == 'f7bb8b7b-004d-4b7f-90fd-ad8e0b7e17c2')
-      const fireAlarm = fpe.resources.assets.filter(asset => asset.productId == '530952b6-8961-4be4-b4d6-cbb9859d8756')
-      const extinguisher = fpe.resources.assets.filter(asset => asset.productId == '4a60754a-19c4-41da-aa6c-13a9b3e66d4c')
-      const sanitizer = fpe.resources.assets.filter(asset => asset.productId == '402d9f73-4eb1-4dbb-8108-c565cdd1edf7')
-      
-      const safetyAssets = {
-        aed: aed,
-        emergencyExit: emergencyExit,
-        fireHose: fireHose,
-        fireAlarm: fireAlarm,
-        extinguisher: extinguisher,
-        sanitizer: sanitizer
-      }
 
       for (let spaceType in selectedSpaces){
         const spaceCenterArr = [];
@@ -398,12 +406,11 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
           nearestDistances[assetType] = distanceRounded;
         }
       }
-      console.log('typeOf', typeof prevNearestDistances)
+
       if (!prevNearestDistances){
         prevNearestDistances = nearestDistances
         modelUpdate({nearestDistances: nearestDistances})
       } else if (objectEquals(prevNearestDistances, nearestDistances)){
-        console.log('equal - !!')
         return
       } else {
         prevNearestDistances = nearestDistances
@@ -428,7 +435,8 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       .then((fpe) => {
         createSpaceColorObjects(fpe.resources.spaces)
         highlightDesksChairs(fpe.resources.assets)
-        calculateAverageDistance(fpe, fpe.resources.spaces, fpe.resources.assets)
+        selectSpacesAssets(fpe.resources)
+        calculateAverageDistance()
       })
     }
   })
