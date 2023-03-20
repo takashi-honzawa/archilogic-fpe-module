@@ -35,7 +35,7 @@ function findMinMax(spaceData) {
 
 let spaceColorObjects = []
 
-let defaultColors = {
+const defaultColors = {
   work: [0, 122, 255], 
   meet: [196, 0, 150],
   socialize: [255, 171, 0],
@@ -44,6 +44,10 @@ let defaultColors = {
   circulate: [84, 192, 114],
   void: [255, 255, 255],
   other: [255, 255, 255]
+}
+const deskColors = {
+  default: [255, 255, 255],
+  highlighted: [0, 122, 255]
 }
 
 let spaceData
@@ -113,7 +117,7 @@ const startupSettings = {
   theme: {
     elements: {
       asset: {
-         fillOpacity: 0.8,
+        fillOpacity: 1,
       },
       roomStamp: {
         roomStampDisplay: ['usage']
@@ -133,6 +137,8 @@ let token
 let floorId
 let hasLoaded = false
 let fpe
+let colorScheme
+let showIcons
 let highlightedIds = []
 let prevClickedSpaceId
 let cursorMarker
@@ -182,8 +188,64 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       nearestMarkers = [];
     }
   }
+
+  function selectSpacesAssets(resources){
+    desks = resources.assets.filter(asset => asset.subCategories.includes("desk"))
+    deskCount = desks.length
+
+    const meetingRoom = resources.spaces.filter(space => space.program === "meet")
+    const socializeSpace = resources.spaces.filter(space => space.program === "socialize")
+    const restroom = resources.spaces.filter(space => space.usage === "restroom")
+    const storage = resources.spaces.filter(space => space.usage === 'storage')
+    const elevator = resources.spaces.filter(space => space.usage === 'elevator')
+    const staircase = resources.spaces.filter(space => space.usage === 'staircase')
+
+    selectedSpaces = {
+      meetingRoom: meetingRoom,
+      socializeSpace: socializeSpace,
+      restroom: restroom,
+      storage: storage,
+      elevator: elevator,
+      staircase: staircase
+    }
+    
+    const aed = resources.assets.filter(asset => asset.productId == '79ee0055-9660-4cb0-9bdb-924b383890eb')
+    const emergencyExit = resources.assets.filter(asset => asset.productId == 'b76ebd68-59d5-48c8-af38-0cd9d514c05c')
+    const fireHose = resources.assets.filter(asset => asset.productId == 'f7bb8b7b-004d-4b7f-90fd-ad8e0b7e17c2')
+    const fireAlarm = resources.assets.filter(asset => asset.productId == '530952b6-8961-4be4-b4d6-cbb9859d8756')
+    const extinguisher = resources.assets.filter(asset => asset.productId == '4a60754a-19c4-41da-aa6c-13a9b3e66d4c')
+    const sanitizer = resources.assets.filter(asset => asset.productId == '402d9f73-4eb1-4dbb-8108-c565cdd1edf7')
+      
+    safetyAssets = {
+      aed: aed,
+      emergencyExit: emergencyExit,
+      fireHose: fireHose,
+      fireAlarm: fireAlarm,
+      extinguisher: extinguisher,
+      sanitizer: sanitizer
+    }
+  }
+
   function createSpaceColorObjects(spaceResources) {
-    createDefaultColors(spaceResources)
+    removeCursorMarker()
+    removeNearestMarkers()
+    
+    if(model.colorScheme === "monochrome"){
+      createMonochromeColors(spaceResources)
+      highlightDesksChairs(fpe.resources.assets, deskColors['highlighted'], 0.4)
+      colorScheme = 'monochrome'
+      if(model.showIcons){
+        addAllIconMarkers()
+        showIcons = true
+      } else {
+        showIcons = false
+      }
+    } else {
+      createDefaultColors(spaceResources)
+      highlightDesksChairs(fpe.resources.assets, deskColors['default'], 1)
+      colorScheme = 'default'
+      showIcons = false
+    }
   }
   function createDefaultColors(spaceResources){
     spaceColorObjects = []
@@ -213,6 +275,21 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       }
     })
   }
+  function createMonochromeColors(spaceResources){
+    spaceColorObjects = []
+    const color = [255, 255, 255]
+    spaceResources.forEach(space => {
+      const spaceColorObject = {
+        space,
+        displayData: { value: null, gradientIndex: null, color: color }
+      }
+      spaceColorObject.space.node.setHighlight({
+        fill: color,
+        fillOpacity: 0.4
+      })
+      spaceColorObjects.push(spaceColorObject)
+    })
+  }
   function setSpaceColorObjectFillOpacity(opacity){
     spaceColorObjects.forEach(spaceColorObject => {
       spaceColorObject.space.node.setHighlight({
@@ -221,53 +298,32 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       })
     })
   }
-  function highlightDesksChairs(assets){
+  function highlightDesksChairs(assets, color, opacity){
     assets.forEach(asset => {
       if(asset.subCategories[0] === 'desk' || asset.subCategories[0] === 'taskChair'){
         asset.node.setHighlight({
-          fill: [255, 213, 199],
-          fillOpacity: 1.0
+          fill: color,
+          fillOpacity: opacity
         })
       }
     })
   }
-  function selectSpacesAssets(resources){
-    desks = resources.assets.filter(asset => asset.subCategories.includes("desk"))
-    deskCount = desks.length
-
-    const meetingRoom = resources.spaces.filter(space => space.program === "meet")
-    const socializeSpace = resources.spaces.filter(space => space.program === "socialize")
-    const restroom = resources.spaces.filter(space => space.usage === "restroom")
-    const storage = resources.spaces.filter(space => space.usage === 'storage')
-    const elevator = resources.spaces.filter(space => space.usage === 'elevator')
-    const staircase = resources.spaces.filter(space => space.usage === 'staircase')
-
-    selectedSpaces = {
-      meetingRoom: meetingRoom,
-      socializeSpace: socializeSpace,
-      restroom: restroom,
-      storage: storage,
-      elevator: elevator,
-      staircase: staircase
+  function addAllIconMarkers(){
+    for (let spaceType in selectedSpaces){
+      selectedSpaces[spaceType].map(space => {
+        const marker = addMarker(fpe, [space.center[0], space.center[1]], false, spaceType);
+        nearestMarkers.push(marker);
+      })
     }
 
-    const aed = resources.assets.filter(asset => asset.productId == '79ee0055-9660-4cb0-9bdb-924b383890eb')
-    const emergencyExit = resources.assets.filter(asset => asset.productId == 'b76ebd68-59d5-48c8-af38-0cd9d514c05c')
-    const fireHose = resources.assets.filter(asset => asset.productId == 'f7bb8b7b-004d-4b7f-90fd-ad8e0b7e17c2')
-    const fireAlarm = resources.assets.filter(asset => asset.productId == '530952b6-8961-4be4-b4d6-cbb9859d8756')
-    const extinguisher = resources.assets.filter(asset => asset.productId == '4a60754a-19c4-41da-aa6c-13a9b3e66d4c')
-    const sanitizer = resources.assets.filter(asset => asset.productId == '402d9f73-4eb1-4dbb-8108-c565cdd1edf7')
-      
-    safetyAssets = {
-      aed: aed,
-      emergencyExit: emergencyExit,
-      fireHose: fireHose,
-      fireAlarm: fireAlarm,
-      extinguisher: extinguisher,
-      sanitizer: sanitizer
+    for (let assetType in safetyAssets){
+      safetyAssets[assetType].map(asset => {
+        const marker = addMarker(fpe, [asset.position.x, asset.position.z], false, assetType);
+        nearestMarkers.push(marker);
+      })
     }
   }
-  
+    
   function calculateAverageDistance(){
     const avgDistanceSpaceAssetType = {
       meetingRoom: 0,
@@ -317,7 +373,6 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       })
       avgDistanceSpaceAssetType[assetType] = (distanceSumAssetType / assetCount) / deskCount
     }
-    console.log('avgDistanceSpaceAssetType', avgDistanceSpaceAssetType)
     modelUpdate({avgDistances: avgDistanceSpaceAssetType})
   }
 
@@ -356,55 +411,55 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
       //add cursorMarker
       cursorMarker = addMarker(fpe, position, true)
 
-      let nearestDistances = {
-        meetingRoom: 0.0,
-        socializeSpace: 0.0,
-        restroom: 0.0,
-        storage: 0.0,
-        elevator: 0.0,
-        staircase: 0.0,
-        aed: 0.0,
-        emergencyExit: 0.0,
-        fireHose: 0.0,
-        fireAlarm: 0.0,
-        extinguisher: 0.0,
-        sanitizer: 0.0,
-      }
+      let nearestDistances = {}
 
       for (let spaceType in selectedSpaces){
         const spaceCenterArr = [];
-        selectedSpaces[spaceType].map(space => {
-          const distance = getDistance({x: position[0], y: position[1]}, {x: space.center[0], y: space.center[1]});
-          spaceCenterArr.push({x: space.center[0], y: space.center[1], distance: distance});
-        })
-        //sort points by distance
-        spaceCenterArr.sort((a, b) => a.distance - b.distance);
-
-        for (let i = 0; i < 1; i++){
-          const marker = addMarker(fpe, [spaceCenterArr[i].x, spaceCenterArr[i].y], false, spaceType);
-          nearestMarkers.push(marker);
-          const distanceRounded = Math.round(spaceCenterArr[i].distance * 10) / 10;
-          
-          nearestDistances[spaceType] = distanceRounded;
+        if(selectedSpaces[spaceType].length !== 0){
+          selectedSpaces[spaceType].map(space => {
+            const distance = getDistance({x: position[0], y: position[1]}, {x: space.center[0], y: space.center[1]});
+            spaceCenterArr.push({x: space.center[0], y: space.center[1], distance: distance});
+          })
         }
+        
+        if(spaceCenterArr.length !== 0){
+          spaceCenterArr.sort((a, b) => a.distance - b.distance);
+          for (let i = 0; i < 1; i++){
+            const marker = addMarker(fpe, [spaceCenterArr[i].x, spaceCenterArr[i].y], false, spaceType);
+            nearestMarkers.push(marker);
+            const distanceRounded = Math.round(spaceCenterArr[i].distance * 10) / 10;
+            
+            nearestDistances[spaceType] = distanceRounded;
+          }
+        } else {
+          nearestDistances[spaceType] = null
+        }
+        
       }
 
       for (let assetType in safetyAssets){
         const assetCenterArr = [];
-        safetyAssets[assetType].map(asset => {
-          const distance = getDistance({x: position[0], y: position[1]}, {x: asset.position.x, y: asset.position.z});
-          assetCenterArr.push({x: asset.position.x, y: asset.position.z, distance: distance});
-        })
-        //sort points by distance
-        assetCenterArr.sort((a, b) => a.distance - b.distance);
-
-        for (let i = 0; i < 1; i++){
-          const marker = addMarker(fpe, [assetCenterArr[i].x, assetCenterArr[i].y], false, assetType);
-          nearestMarkers.push(marker);
-          const distanceRounded = Math.round(assetCenterArr[i].distance * 10) / 10;
-          
-          nearestDistances[assetType] = distanceRounded;
+        if(safetyAssets[assetType].length !== 0){
+          safetyAssets[assetType].map(asset => {
+            const distance = getDistance({x: position[0], y: position[1]}, {x: asset.position.x, y: asset.position.z});
+            assetCenterArr.push({x: asset.position.x, y: asset.position.z, distance: distance});
+          })
         }
+        
+        if(assetCenterArr.length !== 0){
+          assetCenterArr.sort((a, b) => a.distance - b.distance);
+
+          for (let i = 0; i < 1; i++){
+            const marker = addMarker(fpe, [assetCenterArr[i].x, assetCenterArr[i].y], false, assetType);
+            nearestMarkers.push(marker);
+            const distanceRounded = Math.round(assetCenterArr[i].distance * 10) / 10;
+            
+            nearestDistances[assetType] = distanceRounded;
+          }
+        } else {
+          nearestDistances[assetType] = null
+        }
+       
       }
 
       if (!prevNearestDistances){
@@ -433,9 +488,8 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
     if(container.current){
       initFloorPlan()
       .then((fpe) => {
-        createSpaceColorObjects(fpe.resources.spaces)
-        highlightDesksChairs(fpe.resources.assets)
         selectSpacesAssets(fpe.resources)
+        createSpaceColorObjects(fpe.resources.spaces)
         calculateAverageDistance()
       })
     }
@@ -444,6 +498,9 @@ const FloorPlan = ({ triggerQuery, model, modelUpdate }) => {
   useEffect(() => {
     if(!fpe) return
     onClick(fpe)
+    if(model.colorScheme === colorScheme && model.showIcons === showIcons) return
+    if(!colorScheme && !showIcons) return
+    createSpaceColorObjects(fpe.resources.spaces)
   })
   
   return(
